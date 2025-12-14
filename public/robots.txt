@@ -1,0 +1,6 @@
+User-agent: *
+Disallow: /.env
+Disallow: /.env.local
+Disallow: /.env.*
+Disallow: /api/
+
