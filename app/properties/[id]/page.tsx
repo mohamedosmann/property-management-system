@@ -48,18 +48,6 @@ export default async function PropertyDetailsPage({ params }: PropertyDetailsPag
                     </Link>
                 </Button>
 
-                {/* Debug info - remove after fixing */}
-                {process.env.NODE_ENV === 'development' && (
-                    <div className="mb-4 p-4 bg-yellow-100 border border-yellow-400 rounded text-sm">
-                        <p><strong>Debug Info:</strong></p>
-                        <p>Has images: {hasImages ? 'Yes' : 'No'}</p>
-                        <p>Images count: {property.images?.length || 0}</p>
-                        {property.images && property.images.length > 0 && (
-                            <p>First image URL: {property.images[0]?.url}</p>
-                        )}
-                    </div>
-                )}
-
                 <div className="grid gap-8 lg:grid-cols-3">
                     {/* Left Column: Images & Key Info */}
                     <div className="lg:col-span-2 space-y-8">
