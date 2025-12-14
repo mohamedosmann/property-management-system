@@ -48,14 +48,22 @@ export default function LoginPage() {
             });
 
             if (res?.error) {
-                setError("Invalid email or password");
-            } else {
+                // Provide more specific error messages
+                if (res.error === "CredentialsSignin") {
+                    setError("Invalid email or password. Please check your credentials and try again.");
+                } else {
+                    setError(`Login failed: ${res.error}`);
+                }
+            } else if (res?.ok) {
                 // Redirect to home, middleware will handle role-based routing
                 router.push("/");
                 router.refresh();
+            } else {
+                setError("Login failed. Please try again.");
             }
         } catch (error) {
-            setError("Something went wrong");
+            console.error("Login error:", error);
+            setError("Something went wrong. Please check the console for details.");
         } finally {
             setLoading(false);
         }
