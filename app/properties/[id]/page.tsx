@@ -36,6 +36,7 @@ export default async function PropertyDetailsPage({ params }: PropertyDetailsPag
         notFound();
     }
 
+    // Property details page
     return (
         <div className="min-h-screen flex flex-col">
             <PublicNavbar />
