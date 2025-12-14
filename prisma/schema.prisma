@@ -1,0 +1,88 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  CLIENT
+}
+
+model User {
+  id        String   @id @default(cuid()) @map("_id")
+  name      String
+  email     String   @unique
+  password  String
+  image     String?
+  role      String   @default("CLIENT") // SQLite doesn't support enums well, simplified to String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  properties                   Property[]           @relation("OwnerProperties")
+  maintenanceRequests          MaintenanceRequest[] @relation("MaintenanceRequests")
+  assignedMaintenanceRequests  MaintenanceRequest[] @relation("AssignedMaintenanceRequests")
+}
+
+model Property {
+  id          String @id @default(cuid()) @map("_id")
+  title       String
+  description String
+  location    String
+  price       Float
+  type        String
+  bedrooms    Int
+  bathrooms   Int
+  squareFeet  Float
+  features    String // SQLite doesn't support String[], storing as comma-separated string or JSON
+  status      String @default("VACANT")
+
+  ownerId String
+  owner   User   @relation("OwnerProperties", fields: [ownerId], references: [id])
+
+  images              Image[]
+  maintenanceRequests MaintenanceRequest[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Image {
+  id         String   @id @default(cuid()) @map("_id")
+  url        String
+  propertyId String
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+}
+
+model MaintenanceRequest {
+  id          String @id @default(cuid()) @map("_id")
+  title       String
+  description String
+  status      String   @default("PENDING") // PENDING, IN_PROGRESS, COMPLETED
+  priority    String   @default("MEDIUM")  // LOW, MEDIUM, HIGH
+  category    String   @default("GENERAL") // PLUMBING, ELECTRICAL, GENERAL, etc.
+
+  propertyId String
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  tenantId String
+  tenant   User   @relation("MaintenanceRequests", fields: [tenantId], references: [id])
+
+  assignedToId String?
+  assignedTo   User?   @relation("AssignedMaintenanceRequests", fields: [assignedToId], references: [id])
+
+  images      MaintenanceImage[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model MaintenanceImage {
+  id        String   @id @default(cuid()) @map("_id")
+  url       String
+  requestId String
+  request   MaintenanceRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+}
