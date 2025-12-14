@@ -8,10 +8,12 @@ export async function GET() {
     try {
         const hashedPassword = await bcrypt.hash("password123", 10);
 
-        // Upsert Admin
+        // Upsert Admin - this will update password if user exists
         const admin = await prisma.user.upsert({
             where: { email: "admin@example.com" },
-            update: {},
+            update: {
+                password: hashedPassword, // Reset password on update
+            },
             create: {
                 email: "admin@example.com",
                 name: "Admin User",
@@ -20,10 +22,12 @@ export async function GET() {
             },
         });
 
-        // Upsert Client
+        // Upsert Client - this will update password if user exists
         const client = await prisma.user.upsert({
             where: { email: "client@example.com" },
-            update: {},
+            update: {
+                password: hashedPassword, // Reset password on update
+            },
             create: {
                 email: "client@example.com",
                 name: "John Doe Client",
@@ -32,9 +36,18 @@ export async function GET() {
             },
         });
 
-        return NextResponse.json({ success: true, admin, client });
+        return NextResponse.json({ 
+            success: true, 
+            message: "Users created/updated successfully",
+            credentials: {
+                admin: { email: "admin@example.com", password: "password123" },
+                client: { email: "client@example.com", password: "password123" }
+            },
+            admin: { id: admin.id, email: admin.email, name: admin.name, role: admin.role },
+            client: { id: client.id, email: client.email, name: client.name, role: client.role }
+        });
     } catch (error) {
         console.error("Seed error:", error);
-        return NextResponse.json({ success: false, error: String(error) }, { status: 200 });
+        return NextResponse.json({ success: false, error: String(error) }, { status: 500 });
     }
 }
