@@ -65,7 +65,11 @@ export default async function AdminPropertiesPage() {
                         ) : (
                             properties.map((property) => (
                                 <TableRow key={property.id}>
-                                    <TableCell className="font-medium">{property.title}</TableCell>
+                                    <TableCell className="font-medium">
+                                        <Link href={`/admin/properties/${property.id}`} className="hover:underline">
+                                            {property.title}
+                                        </Link>
+                                    </TableCell>
                                     <TableCell>{property.type}</TableCell>
                                     <TableCell>{property.location}</TableCell>
                                     <TableCell>${property.price}</TableCell>

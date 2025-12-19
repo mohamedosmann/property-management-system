@@ -1,192 +1,217 @@
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
-import { redirect } from "next/navigation"
-import { db } from "@/lib/db"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Building2, Wrench, User, MapPin } from "lucide-react"
-import Image from "next/image"
-import { Badge } from "@/components/ui/badge"
+import { db } from "@/lib/db";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
+import { redirect } from "next/navigation";
+import {
+    Wallet,
+    Home,
+    Hammer,
+    FileText,
+    CreditCard,
+    User,
+    ArrowRight
+} from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import Link from "next/link";
+import { format } from "date-fns";
 
-export default async function ClientDashboard() {
-    const session = await getServerSession(authOptions)
+async function getClientStats(userId: string) {
+    const [balanceResult, nextInvoice, openMaintenanceCount, property] = await Promise.all([
+        db.invoice.aggregate({
+            where: {
+                tenantId: userId,
+                status: { in: ["UNPAID", "OVERDUE"] }
+            },
+            _sum: { amount: true }
+        }),
+        db.invoice.findFirst({
+            where: {
+                tenantId: userId,
+                status: { in: ["UNPAID", "OVERDUE"] }
+            },
+            orderBy: { dueDate: 'asc' },
+            include: { property: true }
+        }),
+        db.maintenanceRequest.count({
+            where: {
+                tenantId: userId,
+                status: { not: "COMPLETED" }
+            }
+        }),
+        db.property.findFirst({
+            where: { tenantId: userId }
+        })
+    ]);
 
-    if (!session) {
-        redirect("/auth/login")
-    }
+    return {
+        balance: balanceResult._sum.amount || 0,
+        nextInvoice,
+        openMaintenance: openMaintenanceCount,
+        property
+    };
+}
 
-    // Get user's assigned properties
-    const properties = await db.property.findMany({
-        where: {
-            ownerId: session.user.id,
-        },
-        include: {
-            images: true,
-        },
-        orderBy: {
-            createdAt: "desc",
-        },
-    })
+export default async function ClientDashboardPage() {
+    const session = await getServerSession(authOptions);
+    if (!session || !session.user) redirect("/auth/login");
 
-    // Get user's maintenance requests
-    const maintenanceRequests = await db.maintenanceRequest.findMany({
-        where: {
-            tenantId: session.user.id,
-        },
-        orderBy: {
-            createdAt: "desc",
-        },
-        take: 5,
-    })
+    const stats = await getClientStats(session.user.id);
 
     return (
-        <div className="space-y-6">
-            <div>
-                <h1 className="text-3xl font-bold tracking-tight">
-                    Welcome back, {session.user.name}!
-                </h1>
-                <p className="text-muted-foreground">
-                    Here's an overview of your account
-                </p>
+        <div className="space-y-8 pb-8">
+            <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+                <div>
+                    <h1 className="text-3xl font-bold tracking-tight text-foreground">My Dashboard</h1>
+                    <p className="text-muted-foreground mt-1">Welcome back, {session.user.name}</p>
+                </div>
             </div>
 
-            {/* Stats Cards */}
-            <div className="grid gap-4 md:grid-cols-3">
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">My Properties</CardTitle>
-                        <Building2 className="h-4 w-4 text-muted-foreground" />
+            {/* 1. Key Status Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+
+                {/* Current Balance */}
+                <Card className="border-none card-shadow bg-blue-600 text-white">
+                    <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-medium text-blue-100 flex items-center gap-2">
+                            <Wallet className="h-4 w-4" /> Current Balance
+                        </CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">{properties.length}</div>
-                        <p className="text-xs text-muted-foreground">
-                            Properties assigned to you
-                        </p>
+                        <div className="text-3xl font-bold">${stats.balance.toLocaleString()}</div>
+                        {stats.balance > 0 ? (
+                            <p className="text-sm text-blue-200 mt-1">Due immediately</p>
+                        ) : (
+                            <p className="text-sm text-blue-200 mt-1">All paid up! 🎉</p>
+                        )}
+                        {stats.balance > 0 && (
+                            <Button variant="secondary" size="sm" className="mt-4 w-full text-blue-600 hover:bg-white" asChild>
+                                <Link href="/client/invoices">Pay Now</Link>
+                            </Button>
+                        )}
                     </CardContent>
                 </Card>
 
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Maintenance Requests</CardTitle>
-                        <Wrench className="h-4 w-4 text-muted-foreground" />
+                {/* Next Invoice */}
+                <Card className="border-none card-shadow">
+                    <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                            <CreditCard className="h-4 w-4" /> Next Invoice
+                        </CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">{maintenanceRequests.length}</div>
-                        <p className="text-xs text-muted-foreground">
-                            Total requests submitted
-                        </p>
+                        {stats.nextInvoice ? (
+                            <>
+                                <div className="text-2xl font-bold">${stats.nextInvoice.amount}</div>
+                                <div className="text-sm text-muted-foreground mt-1">
+                                    Due {format(stats.nextInvoice.dueDate, "MMM d, yyyy")}
+                                </div>
+                                <Badge variant={stats.nextInvoice.status === 'OVERDUE' ? 'destructive' : 'secondary'} className="mt-2">
+                                    {stats.nextInvoice.status}
+                                </Badge>
+                            </>
+                        ) : (
+                            <div className="text-muted-foreground py-2">No pending invoices.</div>
+                        )}
                     </CardContent>
                 </Card>
 
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Account Status</CardTitle>
-                        <User className="h-4 w-4 text-muted-foreground" />
+                {/* Maintenance Status */}
+                <Card className="border-none card-shadow">
+                    <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                            <Hammer className="h-4 w-4" /> Maintenance
+                        </CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">Active</div>
-                        <p className="text-xs text-muted-foreground">
-                            {session.user.role}
-                        </p>
+                        <div className="text-2xl font-bold">{stats.openMaintenance}</div>
+                        <div className="text-sm text-muted-foreground mt-1">Open Requests</div>
+                        <Button variant="link" size="sm" className="p-0 h-auto mt-2 text-primary" asChild>
+                            <Link href="/client/maintenance">View All <ArrowRight className="h-3 w-3 ml-1" /></Link>
+                        </Button>
                     </CardContent>
                 </Card>
             </div>
 
-            {/* Recent Maintenance Requests */}
-            {maintenanceRequests.length > 0 && (
-                <Card>
+            {/* 2. Property Info & Actions */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+                {/* My Property */}
+                <Card className="lg:col-span-2 border-none card-shadow">
                     <CardHeader>
-                        <CardTitle>Recent Maintenance Requests</CardTitle>
+                        <CardTitle className="flex items-center gap-2">
+                            <Home className="h-5 w-5 text-primary" /> My Home
+                        </CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <div className="space-y-4">
-                            {maintenanceRequests.map((request) => (
-                                <div
-                                    key={request.id}
-                                    className="flex items-center justify-between border-b pb-2 last:border-0"
-                                >
+                        {stats.property ? (
+                            <div className="flex flex-col md:flex-row gap-6">
+                                <div className="flex-1 space-y-4">
                                     <div>
-                                        <p className="font-medium">{request.title}</p>
-                                        <p className="text-sm text-muted-foreground">
-                                            Status: {request.status}
-                                        </p>
+                                        <h3 className="font-semibold text-lg">{stats.property.title}</h3>
+                                        <p className="text-muted-foreground">{stats.property.location}</p>
                                     </div>
-                                    <div className="text-sm text-muted-foreground">
-                                        {new Date(request.createdAt).toLocaleDateString()}
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="p-3 bg-secondary/50 rounded-lg">
+                                            <div className="text-xs text-muted-foreground">Monthly Rent</div>
+                                            <div className="font-bold">${stats.property.rentAmount || stats.property.price}</div>
+                                        </div>
+                                        <div className="p-3 bg-secondary/50 rounded-lg">
+                                            <div className="text-xs text-muted-foreground">Lease Status</div>
+                                            <div className="font-bold text-green-600">Active</div>
+                                        </div>
                                     </div>
                                 </div>
-                            ))}
-                        </div>
+                                {/* Placeholder for property image if available or generic icon */}
+                                <div className="w-full md:w-48 h-32 bg-slate-100 rounded-lg flex items-center justify-center text-muted-foreground">
+                                    <Home className="h-10 w-10 opacity-20" />
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="text-center py-8 text-muted-foreground">
+                                You are not assigned to any property yet.
+                            </div>
+                        )}
                     </CardContent>
                 </Card>
-            )}
 
-            {/* Assigned Properties */}
-            <div>
-                <h2 className="text-2xl font-bold mb-4">Your Properties</h2>
-                {properties.length === 0 ? (
-                    <Card>
-                        <CardContent className="pt-6">
-                            <div className="text-center py-8 text-muted-foreground">
-                                <Building2 className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                                <p>No properties assigned to you yet.</p>
-                                <p className="text-sm">Contact your administrator to assign properties.</p>
-                            </div>
-                        </CardContent>
-                    </Card>
-                ) : (
-                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                        {properties.map((property) => (
-                            <Card key={property.id} className="overflow-hidden group hover:shadow-lg transition-shadow">
-                                <div className="aspect-video relative bg-muted">
-                                    {property.images && property.images.length > 0 && property.images[0]?.url ? (
-                                        <Image
-                                            src={property.images[0].url}
-                                            alt={property.title}
-                                            fill
-                                            className="object-cover transition-transform group-hover:scale-105"
-                                            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-                                        />
-                                    ) : (
-                                        <div className="flex items-center justify-center h-full text-muted-foreground">
-                                            <Building2 className="h-12 w-12" />
-                                        </div>
-                                    )}
-                                    <div className="absolute top-2 right-2">
-                                        <Badge variant={property.status === "VACANT" ? "secondary" : "default"}>
-                                            {property.status}
-                                        </Badge>
-                                    </div>
+                {/* Quick Actions */}
+                <Card className="border-none card-shadow">
+                    <CardHeader>
+                        <CardTitle>Quick Actions</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                        <Button className="w-full justify-start gap-3 rounded-xl h-12" variant="outline" asChild>
+                            <Link href="/client/maintenance/new">
+                                <Hammer className="h-5 w-5 text-orange-500" />
+                                <div className="text-left">
+                                    <div className="font-semibold text-sm">Report Issue</div>
+                                    <div className="text-[10px] text-muted-foreground">Submit maintenance request</div>
                                 </div>
-                                <CardHeader>
-                                    <CardTitle className="line-clamp-1">{property.title}</CardTitle>
-                                    <div className="flex items-center text-muted-foreground text-sm">
-                                        <MapPin className="h-4 w-4 mr-1" />
-                                        <span className="line-clamp-1">{property.location}</span>
-                                    </div>
-                                </CardHeader>
-                                <CardContent>
-                                    <div className="space-y-2">
-                                        <div className="flex justify-between text-sm">
-                                            <span className="text-muted-foreground">Type</span>
-                                            <span className="font-medium">{property.type}</span>
-                                        </div>
-                                        <div className="flex justify-between text-sm">
-                                            <span className="text-muted-foreground">Price</span>
-                                            <span className="font-medium">${property.price.toLocaleString()}/mo</span>
-                                        </div>
-                                        <div className="flex justify-between text-sm">
-                                            <span className="text-muted-foreground">Details</span>
-                                            <span className="font-medium">
-                                                {property.bedrooms} bed • {property.bathrooms} bath
-                                            </span>
-                                        </div>
-                                    </div>
-                                </CardContent>
-                            </Card>
-                        ))}
-                    </div>
-                )}
+                            </Link>
+                        </Button>
+                        <Button className="w-full justify-start gap-3 rounded-xl h-12" variant="outline" asChild>
+                            <Link href="/client/invoices">
+                                <FileText className="h-5 w-5 text-blue-500" />
+                                <div className="text-left">
+                                    <div className="font-semibold text-sm">View Invoices</div>
+                                    <div className="text-[10px] text-muted-foreground">Download past statements</div>
+                                </div>
+                            </Link>
+                        </Button>
+                        <Button className="w-full justify-start gap-3 rounded-xl h-12" variant="outline" asChild>
+                            <Link href="/client/profile">
+                                <User className="h-5 w-5 text-green-500" />
+                                <div className="text-left">
+                                    <div className="font-semibold text-sm">My Profile</div>
+                                    <div className="text-[10px] text-muted-foreground">Update contact info</div>
+                                </div>
+                            </Link>
+                        </Button>
+                    </CardContent>
+                </Card>
             </div>
         </div>
-    )
+    );
 }
