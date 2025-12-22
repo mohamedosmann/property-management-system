@@ -23,8 +23,10 @@ model User {
   updatedAt DateTime @updatedAt
 
   properties                   Property[]           @relation("OwnerProperties")
+  rentedProperties             Property[]           @relation("TenantProperties")
   maintenanceRequests          MaintenanceRequest[] @relation("MaintenanceRequests")
   assignedMaintenanceRequests  MaintenanceRequest[] @relation("AssignedMaintenanceRequests")
+  invoices                     Invoice[]            @relation("ClientInvoices")
 }
 
 model Property {
@@ -40,8 +42,16 @@ model Property {
   features    String // SQLite doesn't support String[], storing as comma-separated string or JSON
   status      String @default("VACANT")
 
+  rentAmount  Float?
+  billingDay  Int?     @default(1)
+
   ownerId String
   owner   User   @relation("OwnerProperties", fields: [ownerId], references: [id])
+
+  tenantId String?
+  tenant   User?   @relation("TenantProperties", fields: [tenantId], references: [id])
+   
+  invoices Invoice[]
 
   images              Image[]
   maintenanceRequests MaintenanceRequest[]
@@ -85,4 +95,23 @@ model MaintenanceImage {
   url       String
   requestId String
   request   MaintenanceRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+}
+
+model Invoice {
+  id        String   @id @default(cuid()) @map("_id")
+  amount    Float
+  status    String   @default("UNPAID") // PAID, UNPAID, OVERDUE
+  dueDate   DateTime
+  paidDate  DateTime?
+  pdfUrl    String?
+  
+  propertyId String
+  property   Property @relation(fields: [propertyId], references: [id])
+
+  tenantId String
+  tenant   User   @relation("ClientInvoices", fields: [tenantId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

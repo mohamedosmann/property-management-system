@@ -20,7 +20,7 @@ export default async function NewClientMaintenancePage() {
     // For now, fetch properties where this user is the owner (assigned client).
     const properties = await db.property.findMany({
         where: {
-            ownerId: session.user.id
+            tenantId: session.user.id
         },
         select: {
             id: true,
